@@ -1,0 +1,66 @@
+import pandas as pd
+import streamlit as st
+from io import BytesIO
+
+st.set_page_config(page_title="WIR - Assets Matcher", layout="wide")
+
+st.title("🔍 WIR & Assets Log Matcher")
+
+st.write("Upload your **Work Inspection Request Log** and **Assets Log** to match them.")
+
+# File uploaders
+wir_file = st.file_uploader("Upload WIR Log Excel", type=["xlsx"])
+assets_file = st.file_uploader("Upload Assets Log Excel", type=["xlsx"])
+
+if wir_file and assets_file:
+    # Load data
+    wir_log = pd.read_excel(wir_file)
+    assets_log = pd.read_excel(assets_file)
+
+    st.subheader("📑 Preview of WIR Log")
+    st.dataframe(wir_log.head())
+
+    st.subheader("📑 Preview of Assets Log")
+    st.dataframe(assets_log.head())
+
+    # Select matching columns
+    st.subheader("⚙️ Select Matching Columns")
+    wir_column = st.selectbox("Select WIR column from WIR Log", wir_log.columns)
+    assets_column = st.selectbox("Select WIR column from Assets Log", assets_log.columns)
+
+    if st.button("🔗 Match Logs"):
+        # Merge logs
+        merged_data = pd.merge(
+            wir_log, assets_log,
+            left_on=wir_column,
+            right_on=assets_column,
+            how="left"
+        )
+
+        # Identify unmatched WIRs (those with no asset match)
+        unmatched_wirs = merged_data[merged_data[assets_column].isna()]
+
+        st.success("✅ Matching completed!")
+        st.subheader("📊 Matched Results")
+        st.dataframe(merged_data)
+
+        st.subheader("⚠️ Unmatched WIRs")
+        if not unmatched_wirs.empty:
+            st.dataframe(unmatched_wirs)
+        else:
+            st.info("🎉 All WIRs have matching assets.")
+
+        # Convert DataFrames to Excel in memory
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            merged_data.to_excel(writer, index=False, sheet_name="Matched Results")
+            unmatched_wirs.to_excel(writer, index=False, sheet_name="Unmatched WIRs")
+        processed_data = output.getvalue()
+
+        # Download button
+        st.download_button(
+            label="📥 Download Matched Excel (with Unmatched WIRs)",
+            data=processed_data,
+            file_name="wir_assets_matched.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
